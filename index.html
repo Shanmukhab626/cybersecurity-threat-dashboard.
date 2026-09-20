@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Threat Intelligence Dashboard — Shanmukha Sree Bendi</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:       #060C18;
+    --surface:  #0C1628;
+    --surface2: #111E35;
+    --border:   rgba(0,200,255,0.12);
+    --cyan:     #00C8FF;
+    --green:    #00E5A0;
+    --red:      #FF3B5C;
+    --orange:   #FF8C42;
+    --purple:   #A78BFA;
+    --yellow:   #FFD700;
+    --text:     #C8D8F0;
+    --muted:    #556680;
+    --mono:     'JetBrains Mono', monospace;
+    --sans:     'Inter', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  /* ── HEADER ── */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .logo { font-family: var(--mono); font-size: 13px; color: var(--cyan); letter-spacing: 2px; }
+  .live-badge {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(0,229,160,0.1); border: 1px solid var(--green);
+    border-radius: 4px; padding: 3px 10px; font-size: 11px;
+    color: var(--green); font-family: var(--mono);
+  }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .header-right { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .header-title { font-size: 13px; font-weight: 600; color: var(--text); }
+
+  /* ── LAYOUT ── */
+  .main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* ── KPI CARDS ── */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
+  @media(max-width:700px){ .kpi-grid{grid-template-columns:repeat(2,1fr);} }
+  .kpi-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px;
+    position: relative; overflow: hidden;
+  }
+  .kpi-card::before {
+    content:''; position: absolute; top:0; left:0; right:0; height:2px;
+    background: var(--accent, var(--cyan));
+  }
+  .kpi-label { font-size: 11px; color: var(--muted); letter-spacing: 0.5px; margin-bottom: 8px; }
+  .kpi-value { font-family: var(--mono); font-size: 28px; font-weight: 700; color: var(--accent, var(--cyan)); line-height: 1; }
+  .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .kpi-change { font-size: 11px; margin-top: 4px; }
+  .up { color: var(--red); }
+  .down { color: var(--green); }
+
+  /* ── CHART GRID ── */
+  .chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .chart-grid-3 { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  @media(max-width:800px){ .chart-grid-2,.chart-grid-3{grid-template-columns:1fr;} }
+
+  .chart-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px;
+  }
+  .chart-title {
+    font-size: 12px; font-weight: 600; color: var(--text);
+    margin-bottom: 4px; letter-spacing: 0.3px;
+  }
+  .chart-sub { font-size: 11px; color: var(--muted); margin-bottom: 14px; }
+  .chart-wrap { position: relative; }
+
+  /* ── SEVERITY BAR ── */
+  .sev-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .sev-label { font-size: 12px; width: 70px; color: var(--text); flex-shrink:0; }
+  .sev-bar-bg { flex:1; height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow:hidden; }
+  .sev-bar-fill { height: 100%; border-radius: 4px; transition: width 1s ease; }
+  .sev-count { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 36px; text-align:right; }
+
+  /* ── THREAT TABLE ── */
+  .table-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px; margin-bottom: 14px;
+    overflow-x: auto;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 11px; color: var(--muted); font-weight: 500; padding: 0 14px 10px 0; text-align: left; border-bottom: 1px solid var(--border); }
+  td { font-size: 12px; padding: 10px 14px 10px 0; border-bottom: 1px solid rgba(255,255,255,0.03); font-family: var(--mono); color: var(--text); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(0,200,255,0.03); }
+
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 10px; font-weight: 600; font-family: var(--sans);
+  }
+  .badge-critical { background: rgba(255,59,92,0.15); color: var(--red); border: 1px solid rgba(255,59,92,0.3); }
+  .badge-high     { background: rgba(255,140,66,0.15); color: var(--orange); border: 1px solid rgba(255,140,66,0.3); }
+  .badge-medium   { background: rgba(255,215,0,0.12); color: var(--yellow); border: 1px solid rgba(255,215,0,0.25); }
+  .badge-low      { background: rgba(0,229,160,0.1); color: var(--green); border: 1px solid rgba(0,229,160,0.25); }
+
+  .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+
+  /* ── COUNTRY LIST ── */
+  .country-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .country-flag { font-size: 16px; width: 24px; }
+  .country-name { font-size: 12px; color: var(--text); width: 80px; flex-shrink:0; }
+  .country-bar-bg { flex:1; height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow:hidden; }
+  .country-bar { height: 100%; border-radius: 3px; background: var(--red); }
+  .country-count { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 36px; text-align:right; }
+
+  /* ── FOOTER ── */
+  .footer {
+    text-align: center; padding: 20px;
+    font-size: 11px; color: var(--muted);
+    border-top: 1px solid var(--border);
+    font-family: var(--mono);
+  }
+  .footer span { color: var(--cyan); }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo">🛡 THREAT INTEL</div>
+    <div class="header-title">Network Security Operations Dashboard</div>
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+  </div>
+  <div class="header-right" id="clock">Loading...</div>
+</div>
+
+<div class="main">
+
+  <!-- KPI CARDS -->
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--accent:var(--cyan)">
+      <div class="kpi-label">Total Events Analyzed</div>
+      <div class="kpi-value">5,247</div>
+      <div class="kpi-sub">Last 30 days · Network Logs</div>
+      <div class="kpi-change up">↑ 12.4% from last month</div>
+    </div>
+    <div class="kpi-card" style="--accent:var(--red)">
+      <div class="kpi-label">Attacks Detected</div>
+      <div class="kpi-value">2,089</div>
+      <div class="kpi-sub">39.8% of total events</div>
+      <div class="kpi-change up">↑ 8.2% from last month</div>
+    </div>
+    <div class="kpi-card" style="--accent:var(--orange)">
+      <div class="kpi-label">Critical Alerts</div>
+      <div class="kpi-value">47</div>
+      <div class="kpi-sub">Severity 4–5 incidents</div>
+      <div class="kpi-change down">↓ 3 from last month</div>
+    </div>
+    <div class="kpi-card" style="--accent:var(--green)">
+      <div class="kpi-label">Isolation Forest Precision</div>
+      <div class="kpi-value">91.3%</div>
+      <div class="kpi-sub">ML anomaly detection rate</div>
+      <div class="kpi-change down">↑ 2.1% improvement</div>
+    </div>
+  </div>
+
+  <!-- ROW 1: Attack Distribution + Hourly Heatmap -->
+  <div class="chart-grid-2">
+
+    <div class="chart-card">
+      <div class="chart-title">Attack Type Distribution</div>
+      <div class="chart-sub">Breakdown of 2,089 detected attack events by category</div>
+      <div class="chart-wrap" style="height:240px">
+        <canvas id="donutChart"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-title">Attack Volume by Hour of Day</div>
+      <div class="chart-sub">Peak attack windows over 30-day monitoring period</div>
+      <div class="chart-wrap" style="height:240px">
+        <canvas id="hourChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 2: 30-Day Trend + Severity + Countries -->
+  <div class="chart-grid-3">
+
+    <div class="chart-card">
+      <div class="chart-title">30-Day Attack Trend</div>
+      <div class="chart-sub">Daily attack volume with 3-day moving average</div>
+      <div class="chart-wrap" style="height:200px">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-title">Events by Severity Level</div>
+      <div class="chart-sub">NIST-aligned severity classification</div>
+      <br>
+      <div class="sev-row"><span class="sev-label">Safe</span><div class="sev-bar-bg"><div class="sev-bar-fill" style="width:60%;background:#00E5A0"></div></div><span class="sev-count">3,158</span></div>
+      <div class="sev-row"><span class="sev-label">Low</span><div class="sev-bar-bg"><div class="sev-bar-fill" style="width:10%;background:#00C8FF"></div></div><span class="sev-count">525</span></div>
+      <div class="sev-row"><span class="sev-label">Medium</span><div class="sev-bar-bg"><div class="sev-bar-fill" style="width:8%;background:#FFD700"></div></div><span class="sev-count">420</span></div>
+      <div class="sev-row"><span class="sev-label">High</span><div class="sev-bar-bg"><div class="sev-bar-fill" style="width:17%;background:#FF8C42"></div></div><span class="sev-count">892</span></div>
+      <div class="sev-row"><span class="sev-label">Critical</span><div class="sev-bar-bg"><div class="sev-bar-fill" style="width:3%;background:#FF3B5C"></div></div><span class="sev-count">157</span></div>
+      <div class="sev-row"><span class="sev-label">Extreme</span><div class="sev-bar-bg"><div class="sev-bar-fill" style="width:1.8%;background:#A78BFA"></div></div><span class="sev-count">95</span></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-title">Top Attack Source Countries</div>
+      <div class="chart-sub">Geographic threat origin analysis</div>
+      <br>
+      <div class="country-row"><span class="country-flag">🇨🇳</span><span class="country-name">China</span><div class="country-bar-bg"><div class="country-bar" style="width:100%"></div></div><span class="country-count">524</span></div>
+      <div class="country-row"><span class="country-flag">🇷🇺</span><span class="country-name">Russia</span><div class="country-bar-bg"><div class="country-bar" style="width:75%;background:#FF8C42"></div></div><span class="country-count">393</span></div>
+      <div class="country-row"><span class="country-flag">🌐</span><span class="country-name">Unknown</span><div class="country-bar-bg"><div class="country-bar" style="width:50%;background:#FFD700"></div></div><span class="country-count">262</span></div>
+      <div class="country-row"><span class="country-flag">🇮🇷</span><span class="country-name">Iran</span><div class="country-bar-bg"><div class="country-bar" style="width:25%;background:#A78BFA"></div></div><span class="country-count">157</span></div>
+      <div class="country-row"><span class="country-flag">🇧🇷</span><span class="country-name">Brazil</span><div class="country-bar-bg"><div class="country-bar" style="width:20%;background:#00C8FF"></div></div><span class="country-count">104</span></div>
+      <div class="country-row"><span class="country-flag">🇩🇪</span><span class="country-name">Germany</span><div class="country-bar-bg"><div class="country-bar" style="width:13%;background:#00E5A0"></div></div><span class="country-count">69</span></div>
+    </div>
+  </div>
+
+  <!-- THREAT EVENT TABLE -->
+  <div class="table-card">
+    <div class="chart-title" style="margin-bottom:4px">Recent Threat Events</div>
+    <div class="chart-sub" style="margin-bottom:14px">Latest high-priority security incidents flagged by SIEM analysis · Sorted by severity</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Source IP</th>
+          <th>Country</th>
+          <th>Attack Type</th>
+          <th>Target Port</th>
+          <th>Protocol</th>
+          <th>Severity</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="threatTable"></tbody>
+    </table>
+  </div>
+
+  <!-- NIST RECOMMENDATIONS -->
+  <div class="chart-grid-2">
+    <div class="chart-card">
+      <div class="chart-title">NIST Framework Findings</div>
+      <div class="chart-sub">Data-driven recommendations based on threat analysis</div>
+      <br>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="border-left:3px solid var(--red);padding-left:12px">
+          <div style="font-size:12px;font-weight:600;color:var(--red);margin-bottom:3px">🔴 Critical — Firewall Rule Updates</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.6">Block inbound traffic from top 3 attacking IP ranges (China, Russia). Implement geo-blocking for high-risk regions. Estimated impact: reduce DoS exposure by 63%.</div>
+        </div>
+        <div style="border-left:3px solid var(--orange);padding-left:12px">
+          <div style="font-size:12px;font-weight:600;color:var(--orange);margin-bottom:3px">🟠 High — Port 22 Hardening</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.6">SSH brute force accounts for 20.1% of attacks. Enforce key-based auth only, rate-limit login attempts, move SSH to non-standard port.</div>
+        </div>
+        <div style="border-left:3px solid var(--yellow);padding-left:12px">
+          <div style="font-size:12px;font-weight:600;color:var(--yellow);margin-bottom:3px">🟡 Medium — Peak Hour Monitoring</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.6">Attack volume peaks 02:00–04:00 UTC. Recommend enhanced IDS/IPS alert thresholds during off-hours and automated incident escalation.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-title">ML Anomaly Detection Summary</div>
+      <div class="chart-sub">Isolation Forest model performance metrics</div>
+      <br>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div style="background:var(--surface2);border-radius:8px;padding:14px;text-align:center">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--cyan)">91.3%</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Precision</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:8px;padding:14px;text-align:center">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--green)">87.6%</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Recall</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:8px;padding:14px;text-align:center">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--orange)">500</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Trees</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:8px;padding:14px;text-align:center">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--purple)">10%</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Contamination</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;font-size:12px;color:var(--muted);line-height:1.7">
+        Model trained on 5 features: bytes transferred, session duration, destination port, source port, and event severity. Outperforms rule-based detection by <span style="color:var(--green)">+34%</span> in recall.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <span>SHANMUKHA SREE BENDI</span> · MS Information Systems, Central Michigan University ·
+  Cybersecurity Track · Academic Project 2026 ·
+  <span>credly.com/users/shanmukha-sree-bendi</span>
+</div>
+
+<script>
+// ── CLOCK ──
+function updateClock(){
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    n.toUTCString().replace('GMT','UTC');
+}
+updateClock(); setInterval(updateClock,1000);
+
+// ── CHART DEFAULTS ──
+Chart.defaults.color = '#556680';
+Chart.defaults.font.family = "'Inter', sans-serif";
+Chart.defaults.font.size = 11;
+
+// ── DONUT CHART ──
+new Chart(document.getElementById('donutChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Normal','DoS','Port Scan','Brute Force','SQL Injection','MITM','Ransomware'],
+    datasets:[{
+      data: [3158,630,525,420,262,157,95],
+      backgroundColor:['#00E5A0','#FF3B5C','#00C8FF','#FF8C42','#FFD700','#A78BFA','#FF6EB4'],
+      borderWidth:2, borderColor:'#0C1628', hoverOffset:8
+    }]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false, cutout:'65%',
+    plugins:{
+      legend:{ position:'right', labels:{ boxWidth:10, padding:12, font:{size:11} } },
+      tooltip:{ callbacks:{ label: c => ` ${c.label}: ${c.raw.toLocaleString()} events` } }
+    }
+  }
+});
+
+// ── HOURLY CHART ──
+const hours = Array.from({length:24},(_,i)=>i.toString().padStart(2,'0')+':00');
+const hourData = [45,62,89,112,134,98,76,54,62,78,95,118,132,109,98,115,142,168,192,178,154,136,118,82];
+new Chart(document.getElementById('hourChart'), {
+  type: 'bar',
+  data: {
+    labels: hours,
+    datasets:[{
+      label:'Attacks',
+      data: hourData,
+      backgroundColor: hourData.map(v => v>150 ? 'rgba(255,59,92,0.8)' : v>100 ? 'rgba(255,140,66,0.7)' : 'rgba(0,200,255,0.5)'),
+      borderRadius:3, borderSkipped:false
+    }]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false} },
+    scales:{
+      x:{ grid:{color:'rgba(255,255,255,0.04)'}, ticks:{maxRotation:45,font:{size:9}} },
+      y:{ grid:{color:'rgba(255,255,255,0.04)'}, beginAtZero:true }
+    }
+  }
+});
+
+// ── TREND CHART ──
+const days = Array.from({length:30},(_,i)=>{
+  const d = new Date('2026-07-01'); d.setDate(d.getDate()+i);
+  return `${d.getMonth()+1}/${d.getDate()}`;
+});
+const attacks = [52,48,61,78,65,82,94,88,71,65,79,92,108,115,98,87,102,118,134,142,128,115,109,122,138,145,131,118,142,156];
+const ma3 = attacks.map((_,i) => i<2 ? null : Math.round((attacks[i]+attacks[i-1]+attacks[i-2])/3));
+new Chart(document.getElementById('trendChart'), {
+  type:'line',
+  data:{
+    labels: days,
+    datasets:[
+      { label:'Daily Attacks', data:attacks, borderColor:'rgba(255,59,92,0.6)', backgroundColor:'rgba(255,59,92,0.08)', borderWidth:1.5, pointRadius:2, pointHoverRadius:5, fill:true, tension:0.3 },
+      { label:'3-Day MA', data:ma3, borderColor:'#00C8FF', borderWidth:2, pointRadius:0, tension:0.4, borderDash:[4,3] }
+    ]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ labels:{ boxWidth:10, font:{size:10} } } },
+    scales:{
+      x:{ grid:{color:'rgba(255,255,255,0.04)'}, ticks:{maxRotation:45,font:{size:9}, maxTicksLimit:10} },
+      y:{ grid:{color:'rgba(255,255,255,0.04)'}, beginAtZero:true }
+    }
+  }
+});
+
+// ── THREAT TABLE ──
+const events = [
+  ['2026-07-30 03:14:22','185.220.101.47','🇷🇺 Russia','Ransomware','445','TCP','critical','Blocked'],
+  ['2026-07-30 03:09:11','103.25.206.31','🇨🇳 China','DoS','80','TCP','critical','Blocked'],
+  ['2026-07-30 02:58:44','91.108.56.182','🇷🇺 Russia','Brute Force','22','TCP','high','Investigating'],
+  ['2026-07-30 02:41:33','185.176.27.115','🇮🇷 Iran','SQL Injection','3306','TCP','high','Blocked'],
+  ['2026-07-30 02:22:07','45.33.32.156','🌐 Unknown','Port Scan','–','TCP','medium','Monitoring'],
+  ['2026-07-30 01:55:19','194.165.16.88','🇷🇺 Russia','MITM','80','HTTP','high','Investigating'],
+  ['2026-07-30 01:33:04','103.73.188.42','🇨🇳 China','DoS','443','TCP','critical','Blocked'],
+  ['2026-07-30 01:18:52','89.34.111.205','🇩🇪 Germany','Port Scan','–','UDP','low','Monitoring'],
+  ['2026-07-30 00:47:30','192.241.208.19','🌐 Unknown','Brute Force','3389','TCP','high','Blocked'],
+  ['2026-07-29 23:52:11','103.99.0.122','🇧🇷 Brazil','SQL Injection','5432','TCP','medium','Resolved'],
+];
+const statusColors = { Blocked:'#FF3B5C', Investigating:'#FF8C42', Monitoring:'#FFD700', Resolved:'#00E5A0' };
+const tbody = document.getElementById('threatTable');
+events.forEach(([ts,ip,country,type,port,proto,sev,status]) => {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td style="color:var(--muted)">${ts}</td>
+    <td>${ip}</td>
+    <td>${country}</td>
+    <td style="color:var(--text);font-family:var(--sans)">${type}</td>
+    <td>${port}</td>
+    <td>${proto}</td>
+    <td><span class="badge badge-${sev}">${sev.toUpperCase()}</span></td>
+    <td><span class="status-dot" style="background:${statusColors[status]}"></span>${status}</td>
+  `;
+  tbody.appendChild(tr);
+});
+</script>
+</body>
+</html>
